@@ -1,0 +1,197 @@
+name: Sprint tracker setup
+on:
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Create sprint structure (labels, milestones, issues)
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const me = "RuslanKushnirskii"; // назначаемый пользователь
+
+          function isoDateNoMs(d){
+            // return ISO without milliseconds (GitHub accepts)
+            return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 23,59,59)).toISOString();
+          }
+
+          const today = new Date();
+          // Sprint-2: текущий — ближайшие 2 недели от сегодня
+          const sprint2Start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+          const sprint2End = new Date(sprint2Start);
+          sprint2End.setDate(sprint2End.getDate() + 13); // 14 days total
+
+          // Sprint-1: прошедший — середина прошлого месяца (2 недели)
+          const sprint1Start = new Date(today.getFullYear(), today.getMonth()-1, 15);
+          const sprint1End = new Date(sprint1Start);
+          sprint1End.setDate(sprint1End.getDate() + 13);
+
+          // Sprint-3: будущий — через месяц от сегодня (2 недели)
+          const sprint3Start = new Date(today.getFullYear(), today.getMonth()+1, today.getDate());
+          const sprint3End = new Date(sprint3Start);
+          sprint3End.setDate(sprint3End.getDate() + 13);
+
+          // Labels required
+          const labels = [
+            { name: "type: epic", color: "5319e7", description: "Epic" },
+            { name: "type: feature", color: "0e8a16", description: "Feature" },
+            { name: "type: pbi", color: "c2e0ff", description: "Product Backlog Item" },
+            { name: "type: task", color: "fbca04", description: "Task" },
+            { name: "area: PUL-Web", color: "1d76db", description: "Area: PUL-Web" },
+            { name: "status: approved", color: "0e8a16", description: "Approved" },
+            { name: "status: committed", color: "d73a4a", description: "Committed" }
+          ];
+
+          // Helper: create or update label
+          async function ensureLabel(l){
+            try{
+              await github.rest.issues.getLabel({ owner, repo, name: l.name });
+              // exists -> update to ensure color/description
+              await github.rest.issues.updateLabel({ owner, repo, name: l.name, color: l.color.replace('#',''), description: l.description });
+              core.info(`Updated label ${l.name}`);
+            } catch(e){
+              // create
+              await github.rest.issues.createLabel({ owner, repo, name: l.name, color: l.color.replace('#',''), description: l.description });
+              core.info(`Created label ${l.name}`);
+            }
+          }
+
+          // Ensure labels
+          for (const l of labels) {
+            await ensureLabel(l);
+          }
+
+          // Helper: create or get milestone by title (and update description/due_on)
+          async function ensureMilestone(title, startDate, endDate){
+            // search existing milestones
+            const list = await github.rest.issues.listMilestones({ owner, repo, state: "all" });
+            const found = list.data.find(m => m.title === title);
+            const desc = `Start: ${startDate.toISOString().slice(0,10)}\nEnd: ${endDate.toISOString().slice(0,10)}`;
+            const due_on = isoDateNoMs(endDate);
+            if(found){
+              // update
+              await github.rest.issues.updateMilestone({ owner, repo, milestone_number: found.number, state: found.state, title, description: desc, due_on });
+              core.info(`Updated milestone ${title}`);
+              return found;
+            } else {
+              const created = await github.rest.issues.createMilestone({ owner, repo, title, description: desc, due_on });
+              core.info(`Created milestone ${title}`);
+              return created.data;
+            }
+          }
+
+          // create 3 milestones
+          const m1 = await ensureMilestone("Sprint-1", sprint1Start, sprint1End);
+          const m2 = await ensureMilestone("Sprint-2", sprint2Start, sprint2End);
+          const m3 = await ensureMilestone("Sprint-3", sprint3Start, sprint3End);
+
+          // Helper: find existing issue by title (all states)
+          async function findIssueByTitle(title){
+            const issues = await github.rest.issues.listForRepo({ owner, repo, state: "all", per_page: 100 });
+            return issues.data.find(i => i.title === title);
+          }
+
+          // Create Epic
+          const epicTitle = "[Epic] Обучение продуктам";
+          let epic = await findIssueByTitle(epicTitle);
+          if (!epic) {
+            const created = await github.rest.issues.create({
+              owner, repo, title: epicTitle,
+              body: "Эпик для нового функционала обучения продуктов. Содержит фичи и PBIs, связанные с обучающими материалами.",
+              labels: ["type: epic"],
+              milestone: m2.number
+            });
+            epic = created.data;
+            core.info(`Created epic #${epic.number}`);
+          } else {
+            // ensure labels/milestone
+            await github.rest.issues.update({ owner, repo, issue_number: epic.number, labels: Array.from(new Set([...epic.labels.map(l=>l.name),"type: epic"])), milestone: m2.number });
+            core.info(`Found existing epic #${epic.number}`);
+          }
+
+          // Create Feature
+          const featureTitle = "[Feature] Осваиваем дашборды";
+          let feature = await findIssueByTitle(featureTitle);
+          const featureBody = `**Родительский Epic:** #${epic.number}\n\nОписание: Фича по добавлению обучающих дашбордов, метрик и навигации.`;
+          if (!feature) {
+            const created = await github.rest.issues.create({
+              owner, repo, title: featureTitle,
+              body: featureBody,
+              labels: ["type: feature","area: PUL-Web"],
+              assignees: [me],
+              milestone: m2.number
+            });
+            feature = created.data;
+            core.info(`Created feature #${feature.number}`);
+          } else {
+            await github.rest.issues.update({ owner, repo, issue_number: feature.number, body: featureBody, labels: Array.from(new Set([...feature.labels.map(l=>l.name),"type: feature","area: PUL-Web"])), assignees: [me], milestone: m2.number });
+            core.info(`Found existing feature #${feature.number}`);
+          }
+
+          // Create 3 PBIs
+          const pbiTitles = [
+            'Как клиент, я хочу просмотреть новые учебники',
+            'Как клиент, я хочу видеть недавно просмотренные учебники',
+            'Как клиент, я хоч�� запрашивать новые материалы'
+          ];
+
+          const pbiNumbers = [];
+          for(const t of pbiTitles){
+            let i = await findIssueByTitle(t);
+            const body = `**Родительская Feature:** #${feature.number}\n\nОписание: пользовательская история в рамках фичи Осваиваем дашборды.`;
+            if(!i){
+              const created = await github.rest.issues.create({
+                owner, repo, title: t,
+                body,
+                labels: ["type: pbi"],
+                milestone: m2.number
+              });
+              i = created.data;
+              core.info(`Created PBI #${i.number}`);
+            } else {
+              await github.rest.issues.update({ owner, repo, issue_number: i.number, body, labels: Array.from(new Set([...i.labels.map(l=>l.name),"type: pbi"])), milestone: m2.number});
+              core.info(`Found existing PBI #${i.number}`);
+            }
+            pbiNumbers.push(i.number);
+          }
+
+          // Create two tasks for first PBI (use pbiNumbers[0])
+          const taskList = [
+            { title: "Добавить страницу для самых последних учебников", hours: 5 },
+            { title: "Оптимизация запроса к данным для последних учебников", hours: 3 }
+          ];
+          const taskNumbers = [];
+          for(const t of taskList){
+            const taskTitle = t.title;
+            let issue = await findIssueByTitle(taskTitle);
+            const body = `**Родительский PBI:** #${pbiNumbers[0]}\n\nОстаток работы: ${t.hours}ч`;
+            if(!issue){
+              const created = await github.rest.issues.create({
+                owner, repo, title: taskTitle,
+                body,
+                labels: ["type: task"],
+                milestone: m2.number
+              });
+              issue = created.data;
+              core.info(`Created task #${issue.number}`);
+            } else {
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, body, labels: Array.from(new Set([...issue.labels.map(l=>l.name),"type: task"])), milestone: m2.number});
+              core.info(`Found existing task #${issue.number}`);
+            }
+            taskNumbers.push({ number: issue.number, hours: t.hours });
+          }
+
+          // Output created numbers for visibility in the workflow logs
+          core.setOutput("epic_number", epic.number);
+          core.setOutput("feature_number", feature.number);
+          core.setOutput("pbi_numbers", pbiNumbers.join(","));
+          core.setOutput("task_numbers", taskNumbers.map(t=>t.number).join(","));
+          core.info("Sprint setup complete.");

@@ -1,37 +1,57 @@
-name: CI/CD Pipeline Demo
+name: Node.js CI/CD Pipeline
 
-on: [push]
+on:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
+    name: Build stage
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Create dummy files (для демонстрации)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+      - name: Prepare build artifact
         run: |
-          echo "Создаем демонстрационные файлы..."
-          mkdir -p bin/Release
-          echo "Build ${{ github.run_number }}" > bin/Release/build-info.txt
-          date > bin/Release/build-time.txt
-          
-      - name: Upload artifact
+          mkdir dist
+          cp index.js dist/
+          cp package.json dist/
+
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: drop
-          path: bin/Release/
-          
+          name: node-app
+          path: dist/
+
   deploy:
-    runs-on: ubuntu-latest
+    name: Deploy stage
     needs: build
+    runs-on: ubuntu-latest
+
     steps:
-      - name: Download artifact
+      - name: Download build artifact
         uses: actions/download-artifact@v4
         with:
-          name: drop
-          
-      - name: Display files
-        run: ls -la
-        
-      - name: Simulate deployment
-        run: echo "✅ Эмуляция деплоя завершена"
+          name: node-app
+
+      - name: Deploy application (simulation)
+        env:
+          APP_ENV: ${{ secrets.APP_ENV }}
+        run: |
+          echo "Deploying Node.js application..."
+          echo "Environment: $APP_ENV"
+          ls -la

@@ -1,0 +1,27 @@
+{
+  "name": "test_project_01",
+  "version": "1.0.0",
+  "description": "Project for MIREA",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RuslanKushnirskii/Test_project_01.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/RuslanKushnirskii/Test_project_01/issues"
+  },
+  "homepage": "https://github.com/RuslanKushnirskii/Test_project_01#readme",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

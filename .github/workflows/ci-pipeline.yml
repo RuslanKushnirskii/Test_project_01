@@ -1,96 +1,37 @@
-name: CI/CD Pipeline with Artifacts and Deployment
+name: CI/CD Pipeline Demo
 
-# 1. УСЛОВИЯ ЗАПУСКА (аналогично триггерам в Azure DevOps)
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+on: [push]
 
-# 2. ОПРЕДЕЛЕНИЕ ПЕРЕМЕННЫХ ДЛЯ ВСЕГО ПАЙПЛАЙНА (аналогично Variables)
-env:
-  ARTIFACT_NAME: 'drop'           # Имя артефакта, как в методичке
-  DOTNET_VERSION: '6.0.x'         # Версия .NET для сборки (можно заменить на ваш стек)
-
-# 3. МНОГОЭТАПНЫЙ КОНВЕЙЕР (STAGES) - ключевое нововведение
 jobs:
   build:
-    name: Build and Test Stage
     runs-on: ubuntu-latest
-    # 3.1 ЭТАП "BUILD" (СБОРКА)
-    outputs: # Определяем выходные данные этапа (например, версию сборки)
-      build-version: ${{ steps.set-version.outputs.version }}
     steps:
-      - name: Checkout repository code
-        uses: actions/checkout@v4
-
-      - name: Setup .NET Core
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Install dependencies
+      - uses: actions/checkout@v4
+      
+      - name: Create dummy files (для демонстрации)
         run: |
-          echo "📦 Восстановление зависимостей проекта..."
-          dotnet restore PartsUnlimited.sln  # Эмулируем работу с решением из методички
-          echo "✅ Зависимости восстановлены."
-
-      - name: Build the solution
-        run: |
-          echo "🏗️  Выполняется сборка решения..."
-          dotnet build PartsUnlimited.sln --configuration Release --no-restore
-          echo "✅ Сборка успешно завершена."
-
-      - name: Run unit tests
-        run: |
-          echo "🧪 Запуск модульных тестов..."
-          dotnet test PartsUnlimited.sln --configuration Release --no-build --verbosity normal
-          echo "✅ Тестирование завершено."
-
-      # 3.2 ШАГ ДЛЯ ГЕНЕРАЦИИ ВЕРСИИ (имитация)
-      - name: Generate build version
-        id: set-version
-        run: |
-          echo "Версия сборки: 1.0.${{ github.run_number }}"
-          echo "version=1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
-
-      # 3.3 ПУБЛИКАЦИЯ АРТЕФАКТОВ СБОРКИ (КЛЮЧЕВОЙ ШАГ)
-      - name: Publish build artifacts
+          echo "Создаем демонстрационные файлы..."
+          mkdir -p bin/Release
+          echo "Build ${{ github.run_number }}" > bin/Release/build-info.txt
+          date > bin/Release/build-time.txt
+          
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ARTIFACT_NAME }}
-          path: |
-            **/bin/Release/**/*.dll
-            **/publish/
-          retention-days: 7
-        if: success()
-
+          name: drop
+          path: bin/Release/
+          
   deploy:
-    name: Deploy to Azure Stage (Simulated)
     runs-on: ubuntu-latest
-    needs: build # Этот этап зависит от успешного выполнения этапа 'build'
-    # 3.4 ЭТАП "DEPLOY" (РАЗВЕРТЫВАНИЕ - в нашем случае эмуляция)
+    needs: build
     steps:
-      - name: Download build artifacts
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ env.ARTIFACT_NAME }}
-
-      - name: Display artifact structure
-        run: |
-          echo "📂 Содержимое загруженного артефакта:"
-          find . -type f -name "*.dll" | head -5
-
-      - name: Simulate Azure App Service deployment
-        run: |
-          echo "🚀 Начинаем эмуляцию развертывания в Azure App Service..."
-          echo "Имя приложения: pul-yaml-mirea-${{ github.actor }}"
-          echo "Используется артефакт: ${{ env.ARTIFACT_NAME }}"
-          echo "Версия сборки: ${{ needs.build.outputs.build-version }}"
-          # Эмуляция использования строки подключения из Secrets
-          if [ -n "${{ secrets.DEFAULT_CONNECTION_STRING }}" ]; then
-            echo "✅ Строка подключения к БД найдена в Secrets (не отображается в логах)."
-          else
-            echo "⚠️  Переменная DEFAULT_CONNECTION_STRING не задана. Используется локальная БД."
-          fi
-          echo "✅ Эмуляция развертывания завершена. Приложение 'развернуто'."
+          name: drop
+          
+      - name: Display files
+        run: ls -la
+        
+      - name: Simulate deployment
+        run: echo "✅ Эмуляция деплоя завершена"
